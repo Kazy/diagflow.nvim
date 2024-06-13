@@ -65,7 +65,7 @@ end
 M.cached = {}
 
 local function update_cached_diagnostic()
-    local ok, diagnostics = pcall(vim.diagnostic.get, 0)
+    local ok, diagnostics = pcall(vim.diagnostic.get, nil)
 
     if not ok then
         error('Failed to get diagnostic: ' .. diagnostics)
@@ -77,18 +77,27 @@ local function update_cached_diagnostic()
         return
     end
 
-    ok, diagnostics = pcall(function()
-        table.sort(diagnostics, function(a, b) return a.severity < b.severity end)
-        return diagnostics
+    local mapped_diags = {}
+    for _, diag in pairs(diagnostics) do
+        if not mapped_diags[diag.bufnr] then
+            mapped_diags[diag.bufnr] = {}
+        end
+        table.insert(mapped_diags[diag.bufnr], diag)
+    end
+
+    ok, mapped_diags = pcall(function()
+        for _, v in pairs(mapped_diags) do
+            table.sort(v, function(a, b) return a.severity < b.severity end)
+        end
+        return mapped_diags
     end)
 
     if not ok then
-        error('Failed to sort diagnostics ' .. diagnostics)
+        error('Failed to sort diagnostics ' .. mapped_diags)
         return
     end
 
-
-    M.cached = diagnostics
+    M.cached = mapped_diags
 end
 
 
@@ -146,7 +155,7 @@ function M.init(config)
 
         local win_info = vim.fn.getwininfo(vim.fn.win_getid())[1]
 
-        local diags = M.cached
+        local diags = M.cached[win_info.bufnr] or {}
 
         -- Get the current position
         local cursor_pos = vim.api.nvim_win_get_cursor(0)
@@ -155,14 +164,13 @@ function M.init(config)
 
         local current_pos_diags = {}
         for _, diag in ipairs(diags) do
-            local should_insert = diag.lnum <= line and line <= (diag.end_lnum or diag.lnum) and
-            win_info.bufnr == diag.bufnr
+            local should_insert = diag.lnum <= line and line <= (diag.end_lnum or diag.lnum)
             -- Case for config.scope == 'line' is already handled by
             if config.scope == 'cursor' then
                 if diag.end_col and diag.end_lnum then
-                    should_insert = ((diag.lnum == line and diag.col <= col)   -- On the first line, should be after the col
-                        or (diag.lnum < line and line < diag.end_lnum)         -- Between lines, we always show it
-                        or (diag.end_lnum == line and col <= diag.end_col)     -- On the last line, only before the end
+                    should_insert = ((diag.lnum == line and diag.col <= col) -- On the first line, should be after the col
+                        or (diag.lnum < line and line < diag.end_lnum)       -- Between lines, we always show it
+                        or (diag.end_lnum == line and col <= diag.end_col)   -- On the last line, only before the end
                     )
                 else
                     should_insert = diag.lnum == line and (diag.col <= col and (diag.end_col or diag.col) >= col)
