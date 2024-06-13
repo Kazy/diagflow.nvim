@@ -155,17 +155,15 @@ function M.init(config)
 
         local current_pos_diags = {}
         for _, diag in ipairs(diags) do
-            local should_insert = false
-            local in_line = diag.lnum <= line and line <= (diag.end_lnum or diag.lnum)
-            if config.scope == 'line' then
-                should_insert = in_line
-            elseif config.scope == 'cursor' then
+            local should_insert = diag.lnum <= line and line <= (diag.end_lnum or diag.lnum) and
+            win_info.bufnr == diag.bufnr
+            -- Case for config.scope == 'line' is already handled by
+            if config.scope == 'cursor' then
                 if diag.end_col and diag.end_lnum then
-                    should_insert = in_line and
-                        ((diag.lnum == line and diag.col <= col)               -- On the first line, should be after the col
-                            or (diag.lnum < line and line < diag.end_lnum)     -- Between lines, we always show it
-                            or (diag.end_lnum == line and col <= diag.end_col) -- On the last line, only before the end
-                        )
+                    should_insert = ((diag.lnum == line and diag.col <= col)   -- On the first line, should be after the col
+                        or (diag.lnum < line and line < diag.end_lnum)         -- Between lines, we always show it
+                        or (diag.end_lnum == line and col <= diag.end_col)     -- On the last line, only before the end
+                    )
                 else
                     should_insert = diag.lnum == line and (diag.col <= col and (diag.end_col or diag.col) >= col)
                 end
